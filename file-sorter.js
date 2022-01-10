@@ -12,8 +12,14 @@ function fileSort() {
       result.forEach(file => {
         (async () => {
           const oldPath = mainDirectory + file
+          const newDirectory = mainDirectory + file.substr(0, 8)
+          if (!fs.existsSync(newDirectory)){
+            fs.mkdirSync(newDirectory);
+            }
           const newPath = mainDirectory + file.substr(0, 8) + '/' + file
-          await moveFile(oldPath, newPath);
+          await fs.rename(oldPath, newPath, function (err) {
+            if (err) throw err
+          })
           console.log(`${oldPath} has been moved to ${newPath}`);
         })()
       })
