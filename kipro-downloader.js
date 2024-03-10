@@ -1,4 +1,3 @@
-
 const KiPro = require("./index.js").KiPro
 const fs =require('fs')
 const moveFile = require('move-file')
