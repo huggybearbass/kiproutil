@@ -1,1 +1,1 @@
-kiproutil
+These are some utilities that download and organize content from kipro devices.
