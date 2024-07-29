@@ -10,7 +10,7 @@ var ProgressBar = require('progress');
 var host = "0.0.0.0";
 
 var downloadInstances = 0;
-var maxDownloadInstances = 1;
+var maxDownloadInstances = 8;
 var downloadQueue = [];
 
 function KiPro (newHost) {
