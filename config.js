@@ -5,7 +5,9 @@ process.env.TZ = "America/New_York";
 function getComingThursday() {
     const today = new Date();
     const todayDayOfWeek = today.getDay();
-    const daysUntilThursday = (4 - todayDayOfWeek + 7) % 7 || 7; // Ensures Thursday is not 'today'
+    const daysUntilThursday = (4 - todayDayOfWeek + 7) % 7; // Ensures Thursday is not 'today'
+    
+    // If today is Thursday, daysUntilThursday should be 0
     const comingThursday = new Date(today.getTime() + daysUntilThursday * 86400000);
 
     const year = String(comingThursday.getFullYear()).slice(-2);
