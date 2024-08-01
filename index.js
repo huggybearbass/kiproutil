@@ -17,45 +17,45 @@ function KiPro (newHost) {
     host = newHost;
 }
 
-KiPro.prototype.getParameter = function (parameter, cb) {
-    query('config?action=get&paramid=' + parameter, function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-            var response = JSON.parse(body);
-            cb(response);
-        }
-    });
+KiPro.prototype.getParameter = async function (parameter, cb) {
+    try {
+        const response = await axios.get(`http://${host}/config?action=get&paramid=${parameter}`);
+        cb(response.data);
+    } catch (error) {
+        console.error(`Error getting parameter ${parameter}: ${error.message}`);
+    }
 }
 
-KiPro.prototype.setParameter = function (parameter, value, cb) {
-    query('config?action=set&paramid=' + parameter + '&value=' + value, function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-            var response = JSON.parse(body);
-            cb(response);
-        }
-    });
+KiPro.prototype.setParameter = async function (parameter, value, cb) {
+    try {
+        const response = await axios.get(`http://${host}/config?action=set&paramid=${parameter}&value=${value}`);
+        cb(response.data);
+    } catch (error) {
+        console.error(`Error setting parameter ${parameter}: ${error.message}`);
+    }
 }
 
-KiPro.prototype.getClips = function (cb) {
-    query('clips?action=get_clips', function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-            var response = JSON.parse(body);
-            cb(response);
-        }
-    });
+KiPro.prototype.getClips = async function (cb) {
+    try {
+        const response = await axios.get(`http://${host}/clips?action=get_clips`);
+        cb(response.data);
+    } catch (error) {
+        console.error(`Error getting clips: ${error.message}`);
+    }
 }
 
-KiPro.prototype.getPlaylists = function (cb) {
-    query('clips?action=get_playlists', function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-            var response = JSON.parse(body);
-            cb(response);
-        }
-    });
+KiPro.prototype.getPlaylists = async function (cb) {
+    try {
+        const response = await axios.get(`http://${host}/clips?action=get_playlists`);
+        cb(response.data);
+    } catch (error) {
+        console.error(`Error getting playlists: ${error.message}`);
+    }
 }
 
-KiPro.prototype.getMedia = function (file, location, callb) {
+KiPro.prototype.getMedia = async function (file, location, callb) {
     // Setup the transfer logic
-    function download() {
+    const download = async () => {
         // Replace tilde with home directory path
         const homeDir = os.homedir();
         location = location.replace('~', homeDir);
@@ -66,30 +66,30 @@ KiPro.prototype.getMedia = function (file, location, callb) {
             fs.mkdirSync(directory, { recursive: true });
         }
 
-        downloadQueue.push({ host: 'http://' + host + '/media/' + file, file: file, location: location, cb: callb });
+        downloadQueue.push({ host: `http://${host}/media/${file}`, file: file, location: location, cb: callb });
         downloader();
     }
 
     // Check if KiPro is in DATA-LAN mode
-    KiPro.prototype.getParameter("eParamID_MediaState", function(cb) {
+    KiPro.prototype.getParameter("eParamID_MediaState", async (cb) => {
         if (cb.value == 0) {
             KiPro.prototype.setParameter("eParamID_MediaState", 1, download);
         } else {
-            download();
+            await download();
         }
     });
 }
 
-function downloader() {
+async function downloader() {
     if (downloadQueue.length > 0) {
         if (downloadInstances < maxDownloadInstances) {
-            pop(downloadQueue.pop());
+            await pop(downloadQueue.pop());
         }
     }
 
     async function pop(dl) {
         downloadInstances++;
-        console.log("Transfer of " + dl.host + " initiated.");
+        console.log(`Transfer of ${dl.host} initiated.`);
 
         const fileSize = fs.existsSync(dl.location) ? fs.statSync(dl.location).size : 0;
 
@@ -113,7 +113,7 @@ function downloader() {
                 });
 
                 response.data.on('end', () => {
-                    console.log("Transfer of " + dl.host + " completed.");
+                    console.log(`Transfer of ${dl.host} completed.`);
                     downloadInstances--;
                     dl.cb(true, dl.location, dl.file);
                     downloader();
@@ -131,9 +131,4 @@ function downloader() {
     }
 }
 
-function query(action, cb) {
-    request('http://' + host + '/' + action, cb);
-}
-
 exports.KiPro = KiPro;
-
