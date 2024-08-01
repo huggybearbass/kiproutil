@@ -2,7 +2,7 @@
 
 var events = require("events");
 var _ = require("underscore");
-var axios = require("axios");
+var request = require("request");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
@@ -87,47 +87,33 @@ function downloader() {
         }
     }
 
-    async function pop(dl) {
+    function pop(dl) {
         downloadInstances++;
         console.log("Transfer of " + dl.host + " initiated.");
 
-        const fileSize = fs.existsSync(dl.location) ? fs.statSync(dl.location).size : 0;
+        request(dl.host)
+            .on('response', function(res) {
+                const len = parseInt(res.headers['content-length'], 10);
+                const bar = new ProgressBar(`Downloading ${dl.file} [:bar] :percent :etas`, { total: len, width: 40 });
 
-        while (true) {
-            try {
-                const response = await axios({
-                    method: 'get',
-                    url: dl.host,
-                    responseType: 'stream',
-                    headers: {
-                        'Range': `bytes=${fileSize}-`
-                    }
-                });
-
-                const totalLength = parseInt(response.headers['content-length'], 10) + fileSize;
-                const bar = new ProgressBar(`Downloading ${dl.file} [:bar] :percent :etas`, { total: totalLength, width: 40 });
-
-                response.data.on('data', (chunk) => {
-                    fs.appendFileSync(dl.location, chunk);
+                res.on('data', function(chunk) {
                     bar.tick(chunk.length);
                 });
 
-                response.data.on('end', () => {
+                res.on('end', function() {
                     console.log("Transfer of " + dl.host + " completed.");
                     downloadInstances--;
                     dl.cb(true, dl.location, dl.file);
                     downloader();
                 });
-
-                response.data.on('error', (err) => {
-                    throw err;
-                });
-
-                break;
-            } catch (error) {
-                console.log(`Error downloading ${dl.file}: ${error.message}. Retrying...`);
-            }
-        }
+            })
+            .on('error', function(err) {
+                console.log(err);
+                downloadInstances--;
+                dl.cb(false);
+                downloader();
+            })
+            .pipe(fs.createWriteStream(dl.location));
     }
 }
 
@@ -136,4 +122,3 @@ function query(action, cb) {
 }
 
 exports.KiPro = KiPro;
-
