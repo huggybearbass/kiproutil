@@ -106,19 +106,26 @@ async function downloader() {
                 const totalLength = parseInt(response.headers['content-length'], 10) + fileSize;
                 const bar = new ProgressBar(`Downloading ${dl.file} [:bar] :percent :etas`, { total: totalLength, width: 40 });
 
+                const writer = fs.createWriteStream(dl.location, { flags: 'a' });
+
                 response.data.on('data', (chunk) => {
-                    fs.appendFileSync(dl.location, chunk);
+                    writer.write(chunk);
                     bar.tick(chunk.length);
                 });
 
                 response.data.on('end', () => {
                     console.log(`Transfer of ${dl.host} completed.`);
+                    writer.end();
                     downloadInstances--;
                     dl.cb(true, dl.location, dl.file);
                     downloader();
                 });
 
                 response.data.on('error', (err) => {
+                    throw err;
+                });
+
+                writer.on('error', (err) => {
                     throw err;
                 });
 
