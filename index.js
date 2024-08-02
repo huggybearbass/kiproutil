@@ -4,7 +4,6 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { pipeline } = require("stream");
 const ProgressBar = require("progress");
 
 let downloadInstances = 0;
@@ -107,31 +106,20 @@ async function downloader() {
                 const totalLength = parseInt(response.headers['content-length'], 10) + fileSize;
                 const bar = new ProgressBar(`Downloading ${dl.file} [:bar] :percent :etas`, { total: totalLength, width: 40 });
 
-                const writer = fs.createWriteStream(dl.location, { flags: 'a' });
-
                 response.data.on('data', (chunk) => {
+                    fs.appendFileSync(dl.location, chunk);
                     bar.tick(chunk.length);
                 });
 
-                pipeline(response.data, writer, (err) => {
-                    if (err) {
-                        console.error(`Pipeline error: ${err.message}`);
-                        attempts++;
-                        if (attempts < maxAttempts) {
-                            console.log(`Retrying in ${backoffInterval / 1000} seconds...`);
-                            setTimeout(() => downloader(), backoffInterval);
-                        } else {
-                            console.log(`Failed to download ${dl.file} after ${maxAttempts} attempts.`);
-                            downloadInstances--;
-                            dl.cb(false);
-                            downloader();
-                        }
-                    } else {
-                        console.log(`Transfer of ${dl.host} completed.`);
-                        downloadInstances--;
-                        dl.cb(true, dl.location, dl.file);
-                        downloader();
-                    }
+                response.data.on('end', () => {
+                    console.log(`Transfer of ${dl.host} completed.`);
+                    downloadInstances--;
+                    dl.cb(true, dl.location, dl.file);
+                    downloader();
+                });
+
+                response.data.on('error', (err) => {
+                    throw err;
                 });
 
                 break;
@@ -146,17 +134,8 @@ async function downloader() {
                     dl.cb(false);
                     downloader();
                 }
-            } finally {
-                logMemoryUsage();
             }
         }
-    }
-}
-
-function logMemoryUsage() {
-    const used = process.memoryUsage();
-    for (let key in used) {
-        console.log(`${key} ${(used[key] / 1024 / 1024).toFixed(2)} MB`);
     }
 }
 
