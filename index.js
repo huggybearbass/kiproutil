@@ -4,6 +4,7 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { pipeline } = require("stream");
 const ProgressBar = require("progress");
 
 let downloadInstances = 0;
@@ -109,27 +110,28 @@ async function downloader() {
                 const writer = fs.createWriteStream(dl.location, { flags: 'a' });
 
                 response.data.on('data', (chunk) => {
-                    writer.write(chunk);
                     bar.tick(chunk.length);
                 });
 
-                response.data.on('end', () => {
-                    console.log(`Transfer of ${dl.host} completed.`);
-                    writer.end();
-                    downloadInstances--;
-                    dl.cb(true, dl.location, dl.file);
-                    downloader();
-                });
-
-                response.data.on('error', (err) => {
-                    console.error(`Stream error: ${err.message}`);
-                    writer.end();
-                    throw err;
-                });
-
-                writer.on('error', (err) => {
-                    console.error(`Write stream error: ${err.message}`);
-                    throw err;
+                pipeline(response.data, writer, (err) => {
+                    if (err) {
+                        console.error(`Pipeline error: ${err.message}`);
+                        attempts++;
+                        if (attempts < maxAttempts) {
+                            console.log(`Retrying in ${backoffInterval / 1000} seconds...`);
+                            setTimeout(() => downloader(), backoffInterval);
+                        } else {
+                            console.log(`Failed to download ${dl.file} after ${maxAttempts} attempts.`);
+                            downloadInstances--;
+                            dl.cb(false);
+                            downloader();
+                        }
+                    } else {
+                        console.log(`Transfer of ${dl.host} completed.`);
+                        downloadInstances--;
+                        dl.cb(true, dl.location, dl.file);
+                        downloader();
+                    }
                 });
 
                 break;
