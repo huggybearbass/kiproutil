@@ -5,77 +5,74 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const ProgressBar = require("progress");
-const host = "0.0.0.0";
 
 let downloadInstances = 0;
 const maxDownloadInstances = 8;
 const downloadQueue = [];
 
-function KiPro(newHost) {
-    host = newHost;
-}
-
-KiPro.prototype.getParameter = async function (parameter, cb) {
-    try {
-        const response = await axios.get(`http://${host}/config?action=get&paramid=${parameter}`);
-        cb(response.data);
-    } catch (error) {
-        console.error(`Error getting parameter ${parameter}: ${error.message}`);
+class KiPro {
+    constructor(newHost) {
+        this.host = newHost;
     }
-}
 
-KiPro.prototype.setParameter = async function (parameter, value, cb) {
-    try {
-        const response = await axios.get(`http://${host}/config?action=set&paramid=${parameter}&value=${value}`);
-        cb(response.data);
-    } catch (error) {
-        console.error(`Error setting parameter ${parameter}: ${error.message}`);
+    async getParameter(parameter, cb) {
+        try {
+            const response = await axios.get(`http://${this.host}/config?action=get&paramid=${parameter}`);
+            cb(response.data);
+        } catch (error) {
+            console.error(`Error getting parameter ${parameter}: ${error.message}`);
+        }
     }
-}
 
-KiPro.prototype.getClips = async function (cb) {
-    try {
-        const response = await axios.get(`http://${host}/clips?action=get_clips`);
-        cb(response.data);
-    } catch (error) {
-        console.error(`Error getting clips: ${error.message}`);
+    async setParameter(parameter, value, cb) {
+        try {
+            const response = await axios.get(`http://${this.host}/config?action=set&paramid=${parameter}&value=${value}`);
+            cb(response.data);
+        } catch (error) {
+            console.error(`Error setting parameter ${parameter}: ${error.message}`);
+        }
     }
-}
 
-KiPro.prototype.getPlaylists = async function (cb) {
-    try {
-        const response = await axios.get(`http://${host}/clips?action=get_playlists`);
-        cb(response.data);
-    } catch (error) {
-        console.error(`Error getting playlists: ${error.message}`);
+    async getClips(cb) {
+        try {
+            const response = await axios.get(`http://${this.host}/clips?action=get_clips`);
+            cb(response.data);
+        } catch (error) {
+            console.error(`Error getting clips: ${error.message}`);
+        }
     }
-}
 
-KiPro.prototype.getMedia = async function (file, location, callb) {
-    // Setup the transfer logic
-    const download = async () => {
-        // Replace tilde with home directory path
-        const homeDir = os.homedir();
-        location = location.replace('~', homeDir);
+    async getPlaylists(cb) {
+        try {
+            const response = await axios.get(`http://${this.host}/clips?action=get_playlists`);
+            cb(response.data);
+        } catch (error) {
+            console.error(`Error getting playlists: ${error.message}`);
+        }
+    }
 
-        // Ensure directory exists before writing
-        const directory = path.dirname(location);
-        if (!fs.existsSync(directory)) {
-            fs.mkdirSync(directory, { recursive: true });
+    async getMedia(file, location, callb) {
+        const download = async () => {
+            const homeDir = os.homedir();
+            location = location.replace('~', homeDir);
+
+            const directory = path.dirname(location);
+            if (!fs.existsSync(directory)) {
+                fs.mkdirSync(directory, { recursive: true });
+            }
+
+            downloadQueue.push({ host: `http://${this.host}/media/${file}`, file: file, location: location, cb: callb });
+            downloader();
         }
 
-        downloadQueue.push({ host: `http://${host}/media/${file}`, file: file, location: location, cb: callb });
-        downloader();
+        this.getParameter("eParamID_MediaState", async (cb) => {
+            if (cb.value == 0) {
+                this.setParameter("eParamID_MediaState", 1, download);
+            } else {
+                await download();
+            }
+        });
     }
-
-    // Check if KiPro is in DATA-LAN mode
-    this.getParameter("eParamID_MediaState", async (cb) => {
-        if (cb.value == 0) {
-            this.setParameter("eParamID_MediaState", 1, download);
-        } else {
-            await download();
-        }
-    });
 }
 
 async function downloader() {
