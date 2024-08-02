@@ -117,4 +117,58 @@ async function downloader() {
                     console.log(`Transfer of ${dl.host} completed.`);
                     writer.end();
                     downloadInstances--;
- 
+                    dl.cb(true, dl.location, dl.file);
+                    downloader();
+                });
+
+                response.data.on('error', (err) => {
+                    console.error(`Stream error: ${err.message}`);
+                    writer.end();
+                    throw err;
+                });
+
+                writer.on('error', (err) => {
+                    console.error(`Write stream error: ${err.message}`);
+                    throw err;
+                });
+
+                break;
+            } catch (error) {
+                attempts++;
+                console.log(`Error downloading ${dl.file}: ${error.message}. Retrying in ${backoffInterval / 1000} seconds...`);
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, backoffInterval));
+                } else {
+                    console.log(`Failed to download ${dl.file} after ${maxAttempts} attempts.`);
+                    downloadInstances--;
+                    dl.cb(false);
+                    downloader();
+                }
+            } finally {
+                logMemoryUsage();
+            }
+        }
+    }
+}
+
+function logMemoryUsage() {
+    const used = process.memoryUsage();
+    for (let key in used) {
+        console.log(`${key} ${(used[key] / 1024 / 1024).toFixed(2)} MB`);
+    }
+}
+
+// Handle process signals to clean up downloads
+process.on('SIGTERM', () => {
+    console.log('Caught SIGTERM, cleaning up downloads...');
+    downloadQueue.length = 0; // Clear the queue
+    process.exit();
+});
+
+process.on('SIGINT', () => {
+    console.log('Caught SIGINT, cleaning up downloads...');
+    downloadQueue.length = 0; // Clear the queue
+    process.exit();
+});
+
+exports.KiPro = KiPro;
