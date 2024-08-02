@@ -1,19 +1,17 @@
 "use strict";
 
-var events = require("events");
-var _ = require("underscore");
-var axios = require("axios");
-var fs = require("fs");
-var path = require("path");
-var os = require("os");
-var ProgressBar = require('progress');
-var host = "0.0.0.0";
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const ProgressBar = require("progress");
+const host = "0.0.0.0";
 
-var downloadInstances = 0;
-var maxDownloadInstances = 8;
-var downloadQueue = [];
+let downloadInstances = 0;
+const maxDownloadInstances = 8;
+const downloadQueue = [];
 
-function KiPro (newHost) {
+function KiPro(newHost) {
     host = newHost;
 }
 
@@ -71,9 +69,9 @@ KiPro.prototype.getMedia = async function (file, location, callb) {
     }
 
     // Check if KiPro is in DATA-LAN mode
-    KiPro.prototype.getParameter("eParamID_MediaState", async (cb) => {
+    this.getParameter("eParamID_MediaState", async (cb) => {
         if (cb.value == 0) {
-            KiPro.prototype.setParameter("eParamID_MediaState", 1, download);
+            this.setParameter("eParamID_MediaState", 1, download);
         } else {
             await download();
         }
@@ -93,7 +91,11 @@ async function downloader() {
 
         const fileSize = fs.existsSync(dl.location) ? fs.statSync(dl.location).size : 0;
 
-        while (true) {
+        let attempts = 0;
+        const maxAttempts = 5;
+        const backoffInterval = 2000; // 2 seconds
+
+        while (attempts < maxAttempts) {
             try {
                 const response = await axios({
                     method: 'get',
@@ -125,10 +127,32 @@ async function downloader() {
 
                 break;
             } catch (error) {
-                console.log(`Error downloading ${dl.file}: ${error.message}. Retrying...`);
+                attempts++;
+                console.log(`Error downloading ${dl.file}: ${error.message}. Retrying in ${backoffInterval / 1000} seconds...`);
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, backoffInterval));
+                } else {
+                    console.log(`Failed to download ${dl.file} after ${maxAttempts} attempts.`);
+                    downloadInstances--;
+                    dl.cb(false);
+                    downloader();
+                }
             }
         }
     }
 }
+
+// Handle process signals to clean up downloads
+process.on('SIGTERM', () => {
+    console.log('Caught SIGTERM, cleaning up downloads...');
+    downloadQueue.length = 0; // Clear the queue
+    process.exit();
+});
+
+process.on('SIGINT', () => {
+    console.log('Caught SIGINT, cleaning up downloads...');
+    downloadQueue.length = 0; // Clear the queue
+    process.exit();
+});
 
 exports.KiPro = KiPro;
