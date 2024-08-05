@@ -91,7 +91,7 @@ def keep_alive(session, address, interval, pause_event, resume_event):
             resume_event.set()
 
 if __name__ == "__main__":
-    with open('config.json') as config_file:
+    with open('./config.json') as config_file:
         config = json.load(config_file)
 
     coming_thursday = get_coming_thursday()
