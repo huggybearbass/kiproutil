@@ -21,7 +21,7 @@ const comingThursday = getComingThursday();
 
 
 module.exports = {
-    mainDirectory: `/mnt/dropbox/Crossroads Church Dropbox/National/Thursday Service/${comingThursday}/2 SERVICE ELEMENTS`,
+    mainDirectory: `/Volumes/DROPBOX SSD/Crossroads Church Dropbox/National/Thursday Service/${comingThursday}/2 SERVICE ELEMENTS`,
     ips: {
       "REC-201": "172.16.11.124",
       "REC-202": "172.16.11.125",
