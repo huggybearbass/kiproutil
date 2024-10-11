@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import threading
 import time
 from tqdm import tqdm
+from requests.exceptions import ChunkedEncodingError, ConnectionError
 
 def get_coming_thursday():
     today = datetime.now()
@@ -21,47 +22,62 @@ def is_download_allowed(address, session):
     session.get(f"http://{address}/config?action=set&paramid=eParamID_MediaState&value=1")
     return True
 
-def download_clip(address, clip, download_directory, session, pause_event, resume_event, threshold_speed=100, retry_interval=30):
+
+def download_clip(address, clip, download_directory, session, pause_event, resume_event, threshold_speed=100, retry_interval=30, max_retries=5):
     url = f"http://{address}/media/{clip}"
     output_path = os.path.join(download_directory, clip)
 
-    file_size = 0
-    if os.path.exists(output_path):
-        file_size = os.path.getsize(output_path)
+    retries = 0
+    while retries < max_retries:
+        try:
+            file_size = 0
+            if os.path.exists(output_path):
+                file_size = os.path.getsize(output_path)
 
-    headers = {"Range": f"bytes={file_size}-"}
-    response = session.get(url, headers=headers, stream=True)
-    total_size = int(response.headers.get('content-length', 0)) + file_size
+            headers = {"Range": f"bytes={file_size}-"}
+            response = session.get(url, headers=headers, stream=True)
+            total_size = int(response.headers.get('content-length', 0)) + file_size
 
-    with open(output_path, 'ab') as file, tqdm(
-        desc=clip,
-        total=total_size,
-        unit='iB',
-        unit_scale=True,
-        unit_divisor=1024,
-        initial=file_size,
-    ) as bar:
-        start_time = time.time()
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                file.write(chunk)
-                bar.update(len(chunk))
+            with open(output_path, 'ab') as file, tqdm(
+                desc=clip,
+                total=total_size,
+                unit='iB',
+                unit_scale=True,
+                unit_divisor=1024,
+                initial=file_size,
+            ) as bar:
+                start_time = time.time()
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file.write(chunk)
+                        bar.update(len(chunk))
 
-                elapsed_time = time.time() - start_time
-                downloaded_size = bar.n - file_size
-                speed = downloaded_size / elapsed_time if elapsed_time > 0 else float('inf')
+                        elapsed_time = time.time() - start_time
+                        downloaded_size = bar.n - file_size
+                        speed = downloaded_size / elapsed_time if elapsed_time > 0 else float('inf')
 
-                if speed < threshold_speed:
-                    print(f"Pausing download of {clip} due to low speed: {speed:.2f} bytes/sec")
-                    pause_event.set()
-                    resume_event.clear()
-                    time.sleep(retry_interval)
-                    start_time = time.time()
-                    file_size = os.path.getsize(output_path)
-                    headers = {"Range": f"bytes={file_size}-"}
-                    response = session.get(url, headers=headers, stream=True)
-                    pause_event.clear()
-                    resume_event.set()
+                        if speed < threshold_speed:
+                            print(f"Pausing download of {clip} due to low speed: {speed:.2f} bytes/sec")
+                            pause_event.set()
+                            resume_event.clear()
+                            time.sleep(retry_interval)
+                            start_time = time.time()
+                            file_size = os.path.getsize(output_path)
+                            headers = {"Range": f"bytes={file_size}-"}
+                            response = session.get(url, headers=headers, stream=True)
+                            pause_event.clear()
+                            resume_event.set()
+
+            # Break out of retry loop if download was successful
+            break
+
+        except (ChunkedEncodingError, ConnectionError) as e:
+            retries += 1
+            print(f"Connection error: {e}. Retrying {retries}/{max_retries}...")
+            time.sleep(retry_interval)
+
+    if retries == max_retries:
+        print(f"Failed to download {clip} after {max_retries} retries.")
 
 def download_clips(address, response_text, download_directory, session, pause_event, resume_event):
     values = response_text.split(":")
@@ -91,7 +107,7 @@ def keep_alive(session, address, interval, pause_event, resume_event):
             resume_event.set()
 
 if __name__ == "__main__":
-    with open('/app/kiproutil/config.json') as config_file:
+    with open('./config.json') as config_file:
         config = json.load(config_file)
 
     coming_thursday = get_coming_thursday()
